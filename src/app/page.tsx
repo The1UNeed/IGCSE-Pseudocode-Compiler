@@ -1,65 +1,155 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { compilePseudocode } from "@/compiler";
+import { Diagnostic } from "@/compiler/types";
+import { MonacoPseudocodeEditor } from "@/app/components/MonacoPseudocodeEditor";
+import { pythonRunner } from "@/runtime/executePython";
+
+const DEFAULT_SOURCE = `DECLARE Number : INTEGER
+DECLARE Total : INTEGER
+
+FOR Number <- 1 TO 5
+    Total <- Total + Number
+NEXT Number
+
+OUTPUT "Total = ", Total`;
+
+const SOURCE_STORAGE_KEY = "igcse-editor-source-v2";
+
+function getInitialSource() {
+  if (typeof window === "undefined") {
+    return DEFAULT_SOURCE;
+  }
+  return window.localStorage.getItem(SOURCE_STORAGE_KEY) ?? DEFAULT_SOURCE;
+}
+
+function formatDiagnostics(diagnostics: Diagnostic[]): string {
+  if (diagnostics.length === 0) {
+    return "";
+  }
+  return diagnostics
+    .map(
+      (diagnostic) =>
+        `[${diagnostic.code}] ${diagnostic.severity.toUpperCase()} L${diagnostic.line}:C${diagnostic.column} ${diagnostic.message}`,
+    )
+    .join("\n");
+}
+
+export default function HomePage() {
+  const [source, setSource] = useState(getInitialSource);
+  const [compileDiagnostics, setCompileDiagnostics] = useState<Diagnostic[]>([]);
+  const [terminalText, setTerminalText] = useState("Terminal ready. Compile or run your pseudocode.");
+  const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    window.localStorage.setItem(SOURCE_STORAGE_KEY, source);
+  }, [source]);
+
+  const editorDiagnostics = useMemo(() => compileDiagnostics, [compileDiagnostics]);
+
+  const compileNow = () => {
+    const result = compilePseudocode({
+      source,
+      filename: "main.pseudo",
+      strict: true,
+    });
+
+    setCompileDiagnostics(result.diagnostics);
+
+    if (!result.success) {
+      setTerminalText(`Compile failed.\n\n${formatDiagnostics(result.diagnostics)}`);
+      return result;
+    }
+
+    setTerminalText(
+      result.diagnostics.length > 0
+        ? `Compile succeeded with notes.\n\n${formatDiagnostics(result.diagnostics)}`
+        : "Compile succeeded.",
+    );
+
+    return result;
+  };
+
+  const runNow = async () => {
+    const compileResult = compileNow();
+    if (!compileResult.success || !compileResult.pythonCode) {
+      return;
+    }
+
+    setIsRunning(true);
+
+    const runResult = await pythonRunner.run({
+      pythonCode: compileResult.pythonCode,
+      stdinLines: [],
+      virtualFiles: {},
+    });
+
+    const chunks: string[] = [];
+    if (runResult.stdout.trim().length > 0) {
+      chunks.push(`STDOUT:\n${runResult.stdout}`);
+    }
+    if (runResult.stderr.trim().length > 0) {
+      chunks.push(`STDERR:\n${runResult.stderr}`);
+    }
+    if (runResult.diagnostics.length > 0) {
+      chunks.push(`RUNTIME DIAGNOSTICS:\n${formatDiagnostics(runResult.diagnostics)}`);
+    }
+    if (chunks.length === 0) {
+      chunks.push("Program finished with no output.");
+    }
+
+    setTerminalText(chunks.join("\n\n"));
+    setIsRunning(false);
+  };
+
+  const clearTerminal = () => {
+    setTerminalText("");
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="exam-shell min-h-screen p-4 md:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-4">
+        <header className="panel rounded-xl p-4 md:p-5">
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent)]">IGCSE Compiler Lab</p>
+          <h1 className="mt-1 text-2xl font-semibold text-[var(--text)] md:text-3xl">
+            Editor + Terminal
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/manual" className="ui-button">
+              Open Manual
+            </Link>
+            <button type="button" className="ui-button" onClick={compileNow}>
+              Compile
+            </button>
+            <button type="button" className="ui-button ui-button-primary" onClick={runNow} disabled={isRunning}>
+              {isRunning ? "Running..." : "Run"}
+            </button>
+            <button type="button" className="ui-button" onClick={clearTerminal}>
+              Clear Terminal
+            </button>
+          </div>
+        </header>
+
+        <section className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+          <article className="panel overflow-hidden rounded-xl">
+            <div className="border-b border-[var(--panel-border)] px-4 py-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--muted)]">Pseudocode Editor</h2>
+            </div>
+            <div className="h-[72vh] min-h-[540px]">
+              <MonacoPseudocodeEditor value={source} onChange={setSource} diagnostics={editorDiagnostics} />
+            </div>
+          </article>
+
+          <article className="panel rounded-xl p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--muted)]">Terminal</h2>
+            <pre className="mt-3 h-[72vh] min-h-[540px] overflow-auto rounded-md border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 font-mono text-xs text-[var(--text)]">
+              {terminalText || "(empty)"}
+            </pre>
+          </article>
+        </section>
+      </div>
+    </main>
   );
 }

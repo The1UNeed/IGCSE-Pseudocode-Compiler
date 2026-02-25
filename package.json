@@ -2,25 +2,70 @@
   "name": "pseudocode-compiler-codex",
   "version": "0.1.0",
   "private": true,
+  "description": "Desktop and web IGCSE pseudocode compiler built with Next.js and Electron.",
+  "author": "Alex",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -k \"npm:dev:web\" \"npm:dev:electron\"",
+    "dev:web": "next dev",
+    "dev:electron": "wait-on tcp:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .",
     "build": "next build",
+    "build:electron-web": "cross-env BUILD_TARGET=electron next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist": "npm run build:electron-web && electron-builder --mac dmg",
+    "pack": "npm run build:electron-web && electron-builder --dir"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "idb": "^8.0.3",
+    "monaco-editor": "^0.55.1",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "serve-handler": "^6.1.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.0.18",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^37.7.4",
+    "electron-builder": "^26.0.20",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^28.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.alex.pseudocodecompilercodex",
+    "productName": "Pseudocode Compiler Codex",
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "electron/**/*",
+      "out/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
   }
 }
